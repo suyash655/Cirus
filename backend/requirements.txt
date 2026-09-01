@@ -1,0 +1,44 @@
+# CIRUS Backend — Python Dependencies
+# Python 3.11+
+
+# ── Core Framework ────────────────────────────────────────────────────────────
+fastapi==0.115.0
+uvicorn[standard]==0.30.6
+pydantic==2.9.2
+pydantic-settings==2.5.2
+
+# ── Authentication & Integration ──────────────────────────────────────────────
+PyJWT==2.8.0
+PyGithub==2.3.0
+
+# ── Database ──────────────────────────────────────────────────────────────────
+sqlalchemy==2.0.35
+aiosqlite==0.20.0          # SQLite async driver (dev/demo)
+# asyncpg==0.29.0          # PostgreSQL async driver (production — requires MSVC on Windows)
+alembic==1.13.3
+
+# ── HTTP Client ───────────────────────────────────────────────────────────────
+httpx==0.27.2
+openai==1.59.6
+
+# ── Logging ───────────────────────────────────────────────────────────────────
+structlog==24.4.0
+
+# ── Celery / Redis (optional) ─────────────────────────────────────────────────
+# celery==5.4.0
+# redis==5.1.0
+
+# ── Testing ───────────────────────────────────────────────────────────────────
+pytest==8.3.3
+pytest-asyncio==0.24.0
+httpx==0.27.2              # Used as ASGI test client
+
+# ── Temporal Orchestration (Phase 2) ──────────────────────────────────────────
+temporalio==1.8.0
+
+# ── Observability (Phase 3) ───────────────────────────────────────────────────
+langfuse==2.54.0
+
+# ── Caching (Phase 4) ─────────────────────────────────────────────────────────
+redis==5.1.0
+sentence-transformers==3.1.1
