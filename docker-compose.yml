@@ -1,0 +1,36 @@
+version: '3.8'
+
+services:
+  temporal:
+    image: temporalio/admin-tools:1.22.3
+    container_name: temporal
+    ports:
+      - "7233:7233"
+      - "8233:8233"
+    environment:
+      - TEMPORAL_CLI_ADDRESS=temporal:7233
+    entrypoint:
+      - temporal
+      - server
+      - start-dev
+      - --ip=0.0.0.0
+      - --ui-port=8233
+    networks:
+      - cirus-network
+
+  redis:
+    image: redis:7-alpine
+    container_name: redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - cirus-network
+
+networks:
+  cirus-network:
+    driver: bridge
+
+volumes:
+  redis_data:

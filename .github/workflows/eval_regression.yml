@@ -1,0 +1,109 @@
+name: CIRUS Evaluation Regression (Nightly)
+
+on:
+  schedule:
+    # 02:00 UTC daily
+    - cron: '0 2 * * *'
+  push:
+    paths:
+      - 'mlops/evaluation/**'
+      - 'backend/app/validators/**'
+  workflow_dispatch:  # manual trigger for testing
+
+jobs:
+  eval-regression:
+    name: Golden Dataset Evaluation
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2 (SHA-pinned per INC-049)
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@0a5c61591373683505ea898e09a3ea4f39ef2b9f  # v5.0.0
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install OPA (for authoritative Rego validation)
+        run: |
+          curl -L -o opa https://openpolicyagent.org/downloads/v0.68.0/opa_linux_amd64_static
+          chmod +x opa
+          sudo mv opa /usr/local/bin/opa
+          opa version
+
+      - name: Install Python dependencies
+        run: |
+          pip install --upgrade pip
+          pip install -r backend/requirements.txt
+          pip install deepeval python-hcl2 pytest-json-report
+
+      - name: Run evaluation suite
+        env:
+          DEEPEVAL_API_KEY: ${{ secrets.DEEPEVAL_API_KEY }}
+          # Pipeline runs in mock mode for golden dataset evaluation
+          LLM_PROVIDER: mock
+          MODE: mock
+          ENVIRONMENT: development
+          DATABASE_URL: "sqlite+aiosqlite:///./cirus_test.db"
+          ALLOWED_API_KEYS: "ci-test-key"
+        run: |
+          cd $GITHUB_WORKSPACE
+          pytest mlops/evaluation/test_golden_dataset.py \
+            -v \
+            --tb=short \
+            --json-report \
+            --json-report-file=eval_report.json \
+            -x \
+            2>&1 | tee eval_output.log
+        continue-on-error: false
+
+      - name: Upload eval report
+        if: always()
+        uses: actions/upload-artifact@26f96dfa2b179fd5c8984a8e73ae1ef08f76c888  # v4.3.0
+        with:
+          name: eval-report-${{ github.run_number }}
+          path: |
+            eval_report.json
+            eval_output.log
+            mlops/evaluation/eval_report.json
+
+      - name: Post summary to PR (if triggered by push)
+        if: github.event_name == 'push'
+        run: |
+          if [ -f mlops/evaluation/eval_report.json ]; then
+            PASS_RATE=$(python3 -c "import json; d=json.load(open('mlops/evaluation/eval_report.json')); print(f\"{d['pass_rate']:.1%}\")")
+            echo "## CIRUS Eval Report" >> $GITHUB_STEP_SUMMARY
+            echo "Pass rate: **${PASS_RATE}** (threshold: 95%)" >> $GITHUB_STEP_SUMMARY
+          fi
+
+  adversarial-validators:
+    name: Adversarial Validator Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@0a5c61591373683505ea898e09a3ea4f39ef2b9f
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install OPA
+        run: |
+          curl -L -o opa https://openpolicyagent.org/downloads/v0.68.0/opa_linux_amd64_static
+          chmod +x opa
+          sudo mv opa /usr/local/bin/opa
+
+      - name: Install dependencies
+        run: |
+          pip install -r backend/requirements.txt
+          pip install python-hcl2
+
+      - name: Run adversarial validator tests
+        run: |
+          cd $GITHUB_WORKSPACE
+          pytest mlops/evaluation/test_golden_dataset.py::TestAdversarialValidators \
+            -v --tb=short
