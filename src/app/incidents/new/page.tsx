@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Loader2, Zap } from 'lucide-react';
+import { Loader2, Zap, Radio, Copy, Check } from 'lucide-react';
 import { useCreateIncident } from '@/lib/hooks/use-incidents';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -174,12 +174,55 @@ export default function NewIncidentPage() {
     }
   };
 
+  const [copiedWebhook, setCopiedWebhook] = useState<string | null>(null);
+
+  const copyUrl = (type: string, url: string) => {
+    navigator.clipboard.writeText(url);
+    setCopiedWebhook(type);
+    setTimeout(() => setCopiedWebhook(null), 2000);
+  };
+
   return (
     <div className="min-h-screen bg-[var(--color-bg)] px-8 py-10 max-w-[900px] mx-auto">
       <PageHeader
         title="New Incident"
-        description="Provide your incident report and Cirus will generate prevention artifacts."
+        description="Provide your incident report or connect automated webhooks to generate prevention artifacts."
       />
+
+      {/* Webhook live ingestion snippet */}
+      <div
+        className="mb-8 p-4 rounded-xl border flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4"
+        style={{ background: 'var(--color-surface)', borderColor: 'var(--color-border)' }}
+      >
+        <div className="flex items-center gap-3">
+          <div className="w-8 h-8 rounded-lg flex items-center justify-center bg-purple-500/10 text-purple-400">
+            <Radio className="w-4 h-4 animate-pulse" />
+          </div>
+          <div>
+            <p className="text-[13px] font-medium text-text-primary">Automated Alert Ingestion Webhooks</p>
+            <p className="text-[12px] text-text-muted">Auto-trigger CIRUS remediation from PagerDuty & CloudWatch</p>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => copyUrl('pd', 'http://localhost:8000/api/v1/webhooks/pagerduty')}
+            className="c-btn-secondary c-btn-sm text-[11px] font-mono flex items-center gap-1.5"
+          >
+            {copiedWebhook === 'pd' ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
+            PagerDuty Webhook
+          </button>
+          <button
+            type="button"
+            onClick={() => copyUrl('cw', 'http://localhost:8000/api/v1/webhooks/cloudwatch')}
+            className="c-btn-secondary c-btn-sm text-[11px] font-mono flex items-center gap-1.5"
+          >
+            {copiedWebhook === 'cw' ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
+            CloudWatch SNS
+          </button>
+        </div>
+      </div>
 
       <motion.form variants={staggerContainer} initial="hidden" animate="show" onSubmit={handleSubmit} className="relative">
         <AnimatePresence>
