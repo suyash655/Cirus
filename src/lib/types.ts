@@ -353,3 +353,28 @@ export interface UserPreference {
   defaultSeverity: Severity;
   notificationsEnabled: boolean;
 }
+
+// ─── Compliance & Verified SOC Claims ─────────────────────────────────────────
+
+export interface ComplianceControl {
+  id: string;
+  framework: 'SOC2_TYPE_II' | 'CIS_BENCHMARK' | 'ISO_27001' | 'NIST_800_53';
+  name: string;
+  description: string;
+  status: 'VERIFIED' | 'PARTIALLY_SATISFIED' | 'REMEDIATION_REQUIRED';
+  satisfying_artifact: string;
+  claim_details: string;
+  evidence_citation?: string;
+}
+
+export interface IncidentComplianceReport {
+  incident_id: string;
+  overall_compliance_score: number;
+  audit_readiness_status: 'AUDIT_READY' | 'ACTION_REQUIRED' | 'NON_COMPLIANT';
+  verified_claims_count: number;
+  soc2_controls: ComplianceControl[];
+  cis_benchmarks: ComplianceControl[];
+  audit_notes: string;
+  generated_at: string;
+}
+
