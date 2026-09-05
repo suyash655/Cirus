@@ -16,3 +16,10 @@ tsconfig.tsbuildinfo
 .ruff_cache/
 dist/
 build/
+
+# Temporal binaries and archives
+temporal.exe
+temporal*.zip
+temporal_bin/
+temporal_bin*/
+temporal_cli/
