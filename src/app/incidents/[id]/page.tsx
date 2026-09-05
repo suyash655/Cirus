@@ -7,6 +7,8 @@ import { useIncident, useArtifacts, useRiskScore } from '@/lib/hooks/use-inciden
 import { useWorkflowRunByIncident } from '@/lib/hooks/use-workflow';
 import { WorkflowTracker } from '@/components/WorkflowTracker';
 import { ArtifactTabs } from '@/components/ArtifactTabs';
+import { ComplianceAuditCard } from '@/components/incident/compliance-audit-card';
+import { GroundedClaimBadge } from '@/components/incident/grounded-claim-badge';
 import { formatRelativeTime } from '@/lib/utils';
 import { useState } from 'react';
 
@@ -136,6 +138,9 @@ export default function IncidentDetailPage({ params }: { params: Promise<{ id: s
 
           {/* Risk inline stat (demoted from slab to compact) */}
           {incident.status === 'ready' && <InlineRisk incidentId={id} />}
+
+          {/* Evidence Grounding & Anti-Hallucination verification */}
+          {incident.status === 'ready' && <GroundedClaimBadge incidentId={id} />}
         </div>
 
         {/* Title */}
@@ -185,6 +190,9 @@ export default function IncidentDetailPage({ params }: { params: Promise<{ id: s
 
       {/* ── Pipeline stepper ────────────────────────────────────────────────── */}
       <WorkflowTracker incidentId={id} />
+
+      {/* ── Verified SOC Claims & Audit Card ───────────────────────────────── */}
+      {!isProcessing && <ComplianceAuditCard incidentId={id} />}
 
       {/* ── Artifacts ───────────────────────────────────────────────────────── */}
       {!isProcessing && (
