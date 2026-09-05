@@ -83,6 +83,30 @@ class ExportService:
                         ext = _code_extension(art_type, content)
                         zf.writestr(f"{incident_id}/{art_type}{ext}", code)
 
+                # Add SOC 2 & CIS Compliance Audit Trail
+                from app.services.compliance_service import ComplianceService
+                compliance_rep = ComplianceService.generate_compliance_report(incident_id=incident_id)
+                zf.writestr(
+                    f"{incident_id}/audit_compliance_soc2.json",
+                    json.dumps(compliance_rep.model_dump(), indent=2).encode("utf-8"),
+                )
+
+                audit_manifest = (
+                    f"# CIRUS SOC 2 Type II & CIS Compliance Audit Package\n"
+                    f"Incident ID: {incident_id}\n"
+                    f"Generated: {datetime.now(tz=timezone.utc).isoformat()}\n"
+                    f"Status: AUDIT READY (Verified Claims: {compliance_rep.verified_claims_count})\n\n"
+                    f"Artifacts Included:\n"
+                    f"- Root Cause Analysis (rca.md)\n"
+                    f"- Policy-as-Code Guardrail (guardrail.rego)\n"
+                    f"- IaC Remediation Patch (remediation.tf)\n"
+                    f"- Detection Alert Rule (alerts.yaml)\n"
+                    f"- Incident Response Runbook (runbook.md)\n"
+                    f"- Regression Tests (regression_test.py)\n"
+                    f"- SOC 2 Compliance Verification (audit_compliance_soc2.json)\n"
+                )
+                zf.writestr(f"{incident_id}/AUDIT_MANIFEST.md", audit_manifest.encode("utf-8"))
+
             return buffer.getvalue()
         except Exception as e:
             raise ExportError(f"ZIP export failed: {e}")

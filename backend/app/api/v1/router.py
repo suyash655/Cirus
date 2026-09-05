@@ -10,6 +10,11 @@ from app.api.v1.endpoints import (
     dashboard,
     knowledge,
     exports,
+    compliance,
+    citations,
+    gitops,
+    webhooks,
+    sandbox,
 )
 from app.services.incident_io_webhook import router as webhook_router
 
@@ -21,4 +26,9 @@ api_router.include_router(artifacts.router)
 api_router.include_router(dashboard.router)
 api_router.include_router(knowledge.router)
 api_router.include_router(exports.router)
+api_router.include_router(compliance.router)
+api_router.include_router(citations.router)
+api_router.include_router(gitops.router)
+api_router.include_router(webhooks.router)
+api_router.include_router(sandbox.router)
 api_router.include_router(webhook_router)
