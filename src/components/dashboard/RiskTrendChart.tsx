@@ -73,8 +73,8 @@ export function RiskTrendChart({ data }: { data: RiskTrendPoint[] }) {
                 color: 'var(--color-text-primary)',
                 boxShadow: '0 8px 24px rgba(11,11,11,0.12)',
               }}
-              formatter={(value: number, name: string) => [
-                value.toFixed(1),
+              formatter={(value: any, name: any) => [
+                Number(value ?? 0).toFixed(1),
                 name === 'before' ? 'Before remediation' : 'After remediation',
               ]}
             />
