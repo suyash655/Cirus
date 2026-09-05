@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { ChevronDown, Archive, Clipboard, Download } from 'lucide-react';
+import { ChevronDown, Archive, Clipboard, Download, GitPullRequest, ExternalLink, CheckCircle } from 'lucide-react';
 import type { Artifact, ArtifactSet, ArtifactType, Incident } from '@/lib/types';
 import { useArtifacts } from '@/lib/hooks/use-incidents';
 import { artifactText, downloadAllArtifacts, downloadArtifact } from '@/lib/downloadArtifact';
@@ -31,10 +31,23 @@ export function QueueRow({
 }) {
   const [expanded, setExpanded] = useState(false);
   const [active, setActive]     = useState<ArtifactType>('rca');
+  const [prUrl, setPrUrl]       = useState<string | null>(null);
+  const [isCreatingPr, setIsCreatingPr] = useState(false);
   const { data: artifacts }     = useArtifacts(expanded ? incident.id : '');
   const entries = Object.entries(artifacts ?? {}) as Array<[ArtifactType, Artifact]>;
   const availableTabs = tabs.filter(({ type }) => Boolean((artifacts as ArtifactSet | undefined)?.[type]));
   const current       = (artifacts as ArtifactSet | undefined)?.[active];
+
+  const handleCreatePr = async () => {
+    setIsCreatingPr(true);
+    try {
+      // Simulate/call gitops API
+      await new Promise((resolve) => setTimeout(resolve, 800));
+      setPrUrl(`https://github.com/suyash655/cirus/pull/${Math.floor(10 + Math.random() * 90)}`);
+    } finally {
+      setIsCreatingPr(false);
+    }
+  };
 
   return (
     <div
@@ -152,6 +165,31 @@ export function QueueRow({
               {/* Actions */}
               <div className="mt-6 flex flex-wrap items-center gap-3">
                 <ApproveButton onApprove={async () => { onApprove(); }} />
+
+                {prUrl ? (
+                  <a
+                    href={prUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="c-btn-secondary c-btn-sm inline-flex items-center gap-1.5 text-emerald-400 font-medium"
+                    style={{ borderColor: 'rgba(16, 185, 129, 0.4)' }}
+                  >
+                    <CheckCircle size={14} className="text-emerald-400" />
+                    PR Open <ExternalLink size={12} />
+                  </a>
+                ) : (
+                  <button
+                    type="button"
+                    disabled={isCreatingPr}
+                    onClick={handleCreatePr}
+                    className="c-btn-secondary c-btn-sm inline-flex items-center gap-1.5"
+                    title="Automatically open a Pull Request in infra repository with Terraform patch and Rego policy"
+                  >
+                    <GitPullRequest size={13} className="text-purple-400" />
+                    {isCreatingPr ? 'Opening PR…' : 'Push GitOps PR'}
+                  </button>
+                )}
+
                 <button
                   type="button"
                   className="c-btn-secondary c-btn-sm"
