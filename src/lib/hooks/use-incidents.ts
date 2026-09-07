@@ -130,3 +130,34 @@ export function useDashboardStats() {
   });
 }
 
+// ─── Create GitOps Pull Request ───────────────────────────────────────────────
+export function useCreateGitOpsPR() {
+  const queryClient = useQueryClient();
+  const { add: addToast } = useToasts();
+
+  return useMutation({
+    mutationFn: (payload: Parameters<typeof cirusAPI.createGitOpsPR>[0]) =>
+      cirusAPI.createGitOpsPR(payload),
+    onSuccess: (data, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['incidents'] });
+      addToast({
+        type: 'success',
+        title: `PR #${data.prNumber} created`,
+        description: `Branch: ${data.branchName} — ${data.filesCommitted.length} files committed.`,
+      });
+    },
+    onError: (error: Error) => {
+      addToast({ type: 'error', title: 'GitOps PR failed', description: error.message });
+    },
+  });
+}
+
+// ─── Incident compliance ──────────────────────────────────────────────────────
+export function useIncidentCompliance(incidentId: string | undefined) {
+  return useQuery({
+    queryKey: ['compliance', incidentId],
+    queryFn: () => cirusAPI.getIncidentCompliance(incidentId!),
+    enabled: Boolean(incidentId),
+    staleTime: 60_000,
+  });
+}
