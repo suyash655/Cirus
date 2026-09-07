@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Loader2, Zap, Radio, Copy, Check } from 'lucide-react';
+import { Loader2, Zap, Radio, Copy, Check, Sparkles } from 'lucide-react';
 import { useCreateIncident } from '@/lib/hooks/use-incidents';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -117,6 +117,87 @@ function ProcessingOverlay({ step }: { step: number }) {
   );
 }
 
+// ─── Incident presets ────────────────────────────────────────────────────────
+const INCIDENT_PRESETS = [
+  {
+    label: 'S3 Data Exposure',
+    emoji: '🪣',
+    provider: 'AWS' as CloudProvider,
+    severity: 'P2' as Severity,
+    title: 'AWS S3 Public Bucket Exposure — Production Assets',
+    rawText: `[CRITICAL] S3 bucket 'prod-assets-backup' was detected as publicly accessible via AWS Config rule 's3-bucket-public-read-prohibited'.
+
+Timestamp: 2026-09-07T06:14:31Z
+Bucket: prod-assets-backup (us-east-1)
+ACL: public-read
+Objects exposed: ~4,200 files including PII CSV exports
+Impacted services: report-generator, customer-portal, billing-service
+
+Root cause: IAM permission misconfiguration applied during automation pipeline run (PR #3811). s3:PutBucketAcl was granted to CI service account without restriction.
+
+Immediate action: CloudTrail events show 18 external IP reads in 47-minute exposure window.`,
+    artifacts: ['policy', 'iac', 'runbook', 'rca'] as ArtifactType[],
+  },
+  {
+    label: 'K8s OOMKilled',
+    emoji: '☸️',
+    provider: 'GCP' as CloudProvider,
+    severity: 'P2' as Severity,
+    title: 'Kubernetes Ingress Controller OOMKilled — GKE Production',
+    rawText: `[ALERT] ingress-nginx pod crashed with OOMKilled signal on GKE cluster 'prod-us-central1-1'.
+
+Timestamp: 2026-09-07T09:42:05Z
+Namespace: ingress-nginx
+Pod: ingress-nginx-controller-7d4d7b9b9d-hqz2x
+Exit Code: 137 (OOMKilled)
+Crashes (last 2h): 14 (CrashLoopBackOff)
+Memory limit: 256Mi — Usage at spike: 498Mi
+
+Impacted: All external traffic routed through ingress. 3 customer-facing services degraded for ~18 minutes.
+Related: Recent deployment of log-injection middleware (commit a7fc331) added unbounded in-memory buffering.`,
+    artifacts: ['rca', 'iac', 'alerts', 'runbook'] as ArtifactType[],
+  },
+  {
+    label: 'RDS Pool Exhaustion',
+    emoji: '🗄️',
+    provider: 'AWS' as CloudProvider,
+    severity: 'P1' as Severity,
+    title: 'RDS PostgreSQL Connection Pool Exhaustion — API Gateway',
+    rawText: `[P1] Production RDS instance 'api-db-prod' hit max_connections limit (500/500).
+
+Timestamp: 2026-09-07T14:20:00Z
+DB: api-db-prod (PostgreSQL 16, db.r6g.2xlarge)
+Error: FATAL: remaining connection slots are reserved for non-replication superuser connections
+Affected: api-gateway (all replicas), user-service, payment-service
+Duration: 23 minutes (14:20 - 14:43 UTC)
+
+SLO breach: 99.9% → 98.1% for that window.
+Root cause: connection pool misconfiguration after worker count scaling (max_overflow=0 removed). ~12,000 requests returned HTTP 503.`,
+    artifacts: ['rca', 'policy', 'iac', 'alerts'] as ArtifactType[],
+  },
+  {
+    label: 'IAM Escalation',
+    emoji: '🔐',
+    provider: 'AWS' as CloudProvider,
+    severity: 'P1' as Severity,
+    title: 'CloudTrail IAM Privilege Escalation Detected',
+    rawText: `[SECURITY] CloudTrail detected a privilege escalation chain for IAM user 'svc-deploy-runner'.
+
+Timestamp: 2026-09-07T03:11:47Z
+Event chain:
+  1. iam:CreatePolicyVersion → new inline policy attached with sts:AssumeRole *
+  2. sts:AssumeRole → assumed role 'arn:aws:iam::123456789012:role/OrganizationAccountAccessRole'
+  3. iam:AttachUserPolicy → AdministratorAccess attached to 'svc-deploy-runner'
+
+Source IP: 203.0.113.45 (unknown external IP)
+User agent: aws-cli/2.13.0
+Region: us-east-1
+
+Status: IAM user suspended. Keys rotated. Incident declared P1. Forensic analysis required.`,
+    artifacts: ['rca', 'policy', 'runbook', 'regression'] as ArtifactType[],
+  },
+] as const;
+
 // ─── Main form ────────────────────────────────────────────────────────────────
 export default function NewIncidentPage() {
   const router = useRouter();
@@ -136,6 +217,19 @@ export default function NewIncidentPage() {
   });
 
   const [errors, setErrors] = useState<Record<string, string>>({});
+
+  const applyPreset = (preset: typeof INCIDENT_PRESETS[number]) => {
+    setForm((f) => ({
+      ...f,
+      title: preset.title,
+      rawText: preset.rawText,
+      provider: preset.provider,
+      severity: preset.severity,
+      selectedArtifacts: [...preset.artifacts],
+      inputMethod: 'paste',
+    }));
+    setErrors({});
+  };
 
   const validate = () => {
     const e: Record<string, string> = {};
@@ -221,6 +315,40 @@ export default function NewIncidentPage() {
             {copiedWebhook === 'cw' ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
             CloudWatch SNS
           </button>
+        </div>
+      </div>
+
+      {/* 1-click presets */}
+      <div className="mb-6">
+        <div className="flex items-center gap-2 mb-3">
+          <Sparkles size={13} style={{ color: 'var(--color-accent)' }} />
+          <span className="text-[12px] font-medium" style={{ color: 'var(--color-text-secondary)' }}>Quick presets</span>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {INCIDENT_PRESETS.map((preset) => (
+            <button
+              key={preset.label}
+              type="button"
+              id={`preset-${preset.label.replace(/\s+/g, '-').toLowerCase()}`}
+              onClick={() => applyPreset(preset)}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] font-medium transition-all duration-150 hover:scale-105"
+              style={{
+                background: 'var(--color-surface)',
+                border: '1px solid var(--color-border)',
+                color: 'var(--color-text-secondary)',
+              }}
+            >
+              <span>{preset.emoji}</span>
+              <span>{preset.label}</span>
+              <span
+                className="text-[10px] px-1.5 py-0.5 rounded-full"
+                style={{
+                  background: preset.severity === 'P1' ? 'rgba(239,68,68,0.15)' : 'rgba(245,158,11,0.15)',
+                  color: preset.severity === 'P1' ? '#ef4444' : '#f59e0b',
+                }}
+              >{preset.severity}</span>
+            </button>
+          ))}
         </div>
       </div>
 
