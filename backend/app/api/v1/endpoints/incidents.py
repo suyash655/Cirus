@@ -114,16 +114,26 @@ async def create_incident(
 @router.get(
     "/",
     response_model=IncidentListResponse,
-    summary="List all incidents",
+    summary="List all incidents with optional filtering and search",
     dependencies=[Depends(require_api_key)],
 )
 async def list_incidents(
     limit: int = Query(default=50, le=200),
     offset: int = Query(default=0, ge=0),
     status_filter: Optional[str] = Query(default=None, alias="status"),
+    severity: Optional[str] = Query(default=None, description="Filter by severity (e.g. P1, P2, P3, P4)"),
+    provider: Optional[str] = Query(default=None, description="Filter by cloud provider (e.g. AWS, GCP, Azure, Kubernetes)"),
+    search: Optional[str] = Query(default=None, description="Search keyword in title, summary, or ID"),
     svc: IncidentService = Depends(_incident_svc),
 ):
-    items, total = await svc.list_incidents(limit=limit, offset=offset, status=status_filter)
+    items, total = await svc.list_incidents(
+        limit=limit,
+        offset=offset,
+        status=status_filter,
+        severity=severity,
+        provider=provider,
+        search=search,
+    )
     return IncidentListResponse(items=items, total=total)
 
 

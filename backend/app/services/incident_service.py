@@ -64,9 +64,22 @@ class IncidentService:
         return IncidentDetailRead(**_deserialize(incident))
 
     async def list_incidents(
-        self, limit: int = 100, offset: int = 0, status: Optional[str] = None
+        self,
+        limit: int = 100,
+        offset: int = 0,
+        status: Optional[str] = None,
+        severity: Optional[str] = None,
+        provider: Optional[str] = None,
+        search: Optional[str] = None,
     ) -> Tuple[List[IncidentRead], int]:
-        incidents, total = await self._repo.list_all(limit=limit, offset=offset, status=status)
+        incidents, total = await self._repo.list_all(
+            limit=limit,
+            offset=offset,
+            status=status,
+            severity=severity,
+            provider=provider,
+            search=search,
+        )
         return [IncidentRead(**_deserialize(i)) for i in incidents], total
 
     async def update_incident(self, id: str, patch: IncidentUpdate) -> IncidentRead:

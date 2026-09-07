@@ -48,10 +48,28 @@ class IncidentRepository:
         limit: int = 100,
         offset: int = 0,
         status: Optional[str] = None,
+        severity: Optional[str] = None,
+        provider: Optional[str] = None,
+        search: Optional[str] = None,
     ) -> tuple[List[Incident], int]:
+        from sqlalchemy import or_
+
         q = select(Incident)
         if status:
             q = q.where(Incident.status == status)
+        if severity:
+            q = q.where(Incident.severity == severity)
+        if provider:
+            q = q.where(Incident.provider == provider)
+        if search:
+            pattern = f"%{search.strip()}%"
+            q = q.where(
+                or_(
+                    Incident.title.ilike(pattern),
+                    Incident.summary.ilike(pattern),
+                    Incident.id.ilike(pattern),
+                )
+            )
         count_q = select(func.count()).select_from(q.subquery())
         total = (await self._db.execute(count_q)).scalar_one()
         q = q.order_by(Incident.created_at.desc()).limit(limit).offset(offset)
