@@ -20,6 +20,9 @@ import type {
   RiskScore,
   ExtractionResult,
   DashboardStats,
+  CreatePRPayload,
+  GitOpsPRResult,
+  IncidentComplianceReport,
 } from './types';
 import { generateId } from './utils';
 
@@ -405,6 +408,88 @@ export async function getDashboardStats(): Promise<DashboardStats> {
   };
 }
 
+// ─── GitOps Pull Request API ──────────────────────────────────────────────────
+
+export async function createGitOpsPR(payload: CreatePRPayload): Promise<GitOpsPRResult> {
+  if (!USE_MOCKS) {
+    const raw = await apiFetch<any>('/gitops/create-pr', {
+      method: 'POST',
+      body: JSON.stringify(snakeKeys(payload)),
+    });
+    return camelKeys<GitOpsPRResult>(raw);
+  }
+
+  await delay(600);
+  const cleanId = payload.incidentId.replace('inc-', '').slice(0, 8);
+  const repo = payload.targetRepo || 'suyash655/cirus';
+  const prNum = 100 + (Math.abs(cleanId.split('').reduce((acc, c) => acc + c.charCodeAt(0), 0)) % 800);
+  return {
+    success: true,
+    prUrl: `https://github.com/${repo}/pull/${prNum}`,
+    prNumber: prNum,
+    branchName: `cirus/remediation-${cleanId}`,
+    targetRepo: repo,
+    filesCommitted: [
+      `policies/guardrails/${cleanId}.rego`,
+      `terraform/patches/${cleanId}_remediation.tf`,
+      `docs/runbooks/${cleanId}_runbook.md`,
+    ],
+    commitSha: 'a7b3c9f2',
+    diffPreview: '+# Automated remediation patch by CIRUS\n+resource "aws_s3_bucket_public_access_block" "enforce" {\n+  block_public_acls = true\n+}',
+    message: `Successfully opened Pull Request #${prNum} on ${repo} from branch 'cirus/remediation-${cleanId}'. Automated CI regression and policy syntax checks triggered.`,
+    createdAt: new Date().toISOString(),
+  };
+}
+
+// ─── Compliance API ───────────────────────────────────────────────────────────
+
+export async function getIncidentCompliance(incidentId: string): Promise<IncidentComplianceReport | null> {
+  if (!USE_MOCKS) {
+    return camelKeys<IncidentComplianceReport>(await apiFetch(`/compliance/${incidentId}`));
+  }
+
+  await delay(250);
+  return {
+    incident_id: incidentId,
+    overall_compliance_score: 94,
+    audit_readiness_status: 'AUDIT_READY',
+    verified_claims_count: 5,
+    soc2_controls: [
+      {
+        id: 'CC6.1',
+        framework: 'SOC2_TYPE_II',
+        name: 'Logical Access Controls',
+        description: 'Access to cloud infrastructure is restricted and authenticated.',
+        status: 'VERIFIED',
+        satisfying_artifact: 'policy',
+        claim_details: 'Automated Rego guardrail enforces role-based session timeouts and MFA.',
+      },
+      {
+        id: 'CC6.8',
+        framework: 'SOC2_TYPE_II',
+        name: 'Unauthorized Software & Changes Prevention',
+        description: 'Prevent unauthorized drift or deployment of unsafe configurations.',
+        status: 'VERIFIED',
+        satisfying_artifact: 'iac',
+        claim_details: 'Terraform remediation patch locks S3 bucket ACLs and enforces server-side KMS encryption.',
+      },
+    ],
+    cis_benchmarks: [
+      {
+        id: 'CIS-1.4',
+        framework: 'CIS_BENCHMARK',
+        name: 'Ensure root user has no active access keys',
+        description: 'Root access must be restricted to break-glass procedures.',
+        status: 'VERIFIED',
+        satisfying_artifact: 'policy',
+        claim_details: 'Policy denies actions executed directly using root account credentials.',
+      },
+    ],
+    audit_notes: 'All generated guardrails strictly adhere to SOC 2 Type II trust criteria and CIS Cloud Foundations Benchmark.',
+    generated_at: new Date().toISOString(),
+  };
+}
+
 // ─── Export API object ────────────────────────────────────────────────────────
 export const cirusAPI = {
   getIncidents,
@@ -418,6 +503,8 @@ export const cirusAPI = {
   getRiskScore,
   getExtraction,
   getDashboardStats,
+  createGitOpsPR,
+  getIncidentCompliance,
 };
 
 export type { CirusAPIError };

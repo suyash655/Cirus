@@ -378,3 +378,27 @@ export interface IncidentComplianceReport {
   generated_at: string;
 }
 
+// ─── GitOps ───────────────────────────────────────────────────────────────────
+
+export interface CreatePRPayload {
+  incidentId: string;
+  targetRepo?: string;
+  baseBranch?: string;
+  title?: string;
+  artifacts?: string[];
+}
+
+export interface GitOpsPRResult {
+  success: boolean;
+  prUrl: string;
+  prNumber: number;
+  branchName: string;
+  targetRepo: string;
+  filesCommitted: string[];
+  commitSha: string;
+  diffPreview: string;
+  message: string;
+  createdAt: string;
+}
+
+
