@@ -8,14 +8,18 @@ import { CheckCircle, XCircle, Info, AlertTriangle, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 // ─── Query Client ─────────────────────────────────────────────────────────────
-const queryClient = new QueryClient({
-  defaultOptions: {
-    queries: {
-      retry: 1,
-      refetchOnWindowFocus: false,
+// Instantiated inside a ref so each render tree (including SSR) gets its own
+// isolated client — prevents request data from leaking across users in Next.js.
+function makeQueryClient() {
+  return new QueryClient({
+    defaultOptions: {
+      queries: {
+        retry: 1,
+        refetchOnWindowFocus: false,
+      },
     },
-  },
-});
+  });
+}
 
 // ─── Toast UI ─────────────────────────────────────────────────────────────────
 const toastIcons = {
@@ -82,8 +86,13 @@ function ToastContainer() {
 
 // ─── Root Providers ───────────────────────────────────────────────────────────
 function Providers({ children }: { children: React.ReactNode }) {
+  const queryClientRef = React.useRef<QueryClient | null>(null);
+  if (!queryClientRef.current) {
+    queryClientRef.current = makeQueryClient();
+  }
+
   return (
-    <QueryClientProvider client={queryClient}>
+    <QueryClientProvider client={queryClientRef.current}>
       {children}
       <ToastContainer />
     </QueryClientProvider>
