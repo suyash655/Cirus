@@ -4,6 +4,9 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { useShallow } from 'zustand/react/shallow';
 
+// Tracks auto-dismiss timer IDs so they can be cancelled on manual dismiss
+const toastTimers = new Map<string, ReturnType<typeof setTimeout>>();
+
 // ═══════════════════════════════════════════
 // CIRUS — Zustand UI State Store
 // ═══════════════════════════════════════════
@@ -61,13 +64,22 @@ export const useUIStore = create<UIState>()(
       addToast: (toast) => {
         const id = Math.random().toString(36).slice(2);
         set((s) => ({ toasts: [...s.toasts, { ...toast, id }] }));
-        // Auto-remove after 5s
-        setTimeout(() => {
+        // Auto-remove after 5s; store timer ID so manual dismiss can cancel it
+        const timer = setTimeout(() => {
           get().removeToast(id);
+          toastTimers.delete(id);
         }, 5000);
+        toastTimers.set(id, timer);
       },
-      removeToast: (id) =>
-        set((s) => ({ toasts: s.toasts.filter((t) => t.id !== id) })),
+      removeToast: (id) => {
+        // Cancel pending auto-dismiss if user dismissed manually
+        const timer = toastTimers.get(id);
+        if (timer !== undefined) {
+          clearTimeout(timer);
+          toastTimers.delete(id);
+        }
+        set((s) => ({ toasts: s.toasts.filter((t) => t.id !== id) }));
+      },
 
       // Approvals
       approvals: {},
