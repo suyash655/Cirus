@@ -28,7 +28,11 @@ export function downloadArtifact(filename: string, content: string) {
   const anchor = document.createElement('a');
   anchor.href = url;
   anchor.download = filename;
+  // Must be in DOM for Firefox/Safari to trigger the download
+  anchor.style.display = 'none';
+  document.body.appendChild(anchor);
   anchor.click();
+  document.body.removeChild(anchor);
   URL.revokeObjectURL(url);
 }
 
@@ -41,6 +45,10 @@ export async function downloadAllArtifacts(entries: Array<[ArtifactType, Artifac
   const anchor = document.createElement('a');
   anchor.href = url;
   anchor.download = 'cirus-guardrails.zip';
+  // Must be in DOM for Firefox/Safari to trigger the download
+  anchor.style.display = 'none';
+  document.body.appendChild(anchor);
   anchor.click();
+  document.body.removeChild(anchor);
   URL.revokeObjectURL(url);
 }
