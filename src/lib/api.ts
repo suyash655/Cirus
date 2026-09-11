@@ -412,7 +412,7 @@ export async function getDashboardStats(): Promise<DashboardStats> {
 
 export async function createGitOpsPR(payload: CreatePRPayload): Promise<GitOpsPRResult> {
   if (!USE_MOCKS) {
-    const raw = await apiFetch<any>('/gitops/create-pr', {
+    const raw = await apiFetch<Record<string, unknown>>('/gitops/create-pr', {
       method: 'POST',
       body: JSON.stringify(snakeKeys(payload)),
     });
@@ -536,14 +536,12 @@ export async function fetchDashboardData() {
     };
   }
 
-  const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
-  const apiKey = process.env.NEXT_PUBLIC_API_KEY || 'dev-api-key-12345';
-  const headers: Record<string, string> = { 'X-API-Key': apiKey };
+  const headers: Record<string, string> = { 'X-API-Key': API_KEY };
 
   try {
     const [statsRes, incidentsRes] = await Promise.all([
-      fetch(`${baseUrl}/api/v1/dashboard/stats`, { headers, cache: 'no-store' }),
-      fetch(`${baseUrl}/api/v1/incidents/?limit=10`, { headers, cache: 'no-store' }),
+      fetch(`${API_BASE_URL}/api/v1/dashboard/stats`, { headers, cache: 'no-store' }),
+      fetch(`${API_BASE_URL}/api/v1/incidents/?limit=10`, { headers, cache: 'no-store' }),
     ]);
 
     if (!statsRes.ok || !incidentsRes.ok) {

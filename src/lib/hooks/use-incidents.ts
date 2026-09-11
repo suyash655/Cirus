@@ -99,6 +99,9 @@ export function useDeleteIncident() {
       queryClient.invalidateQueries({ queryKey: ['incidents'] });
       addToast({ type: 'info', title: 'Incident deleted' });
     },
+    onError: (error: Error) => {
+      addToast({ type: 'error', title: 'Delete failed', description: error.message });
+    },
   });
 }
 
