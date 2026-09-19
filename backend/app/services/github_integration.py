@@ -344,7 +344,13 @@ def _push_files_to_branch(
     incident_reference: str,
     create_branch: bool = False,
 ) -> None:
-    """Push or update files on a branch."""
+    """Push or update files on a branch.
+
+    Raises RuntimeError if any file fails to push, so the caller knows
+    the PR content is incomplete. Silent swallowing was the prior behaviour
+    and caused PRs to be opened with 0 files committed.
+    """
+    failed: list[str] = []
     for file_path, content in files.items():
         commit_message = f"chore: CIRUS prevention artifact for {incident_reference} — {file_path}"
         try:
@@ -369,4 +375,11 @@ def _push_files_to_branch(
                 )
                 log.debug(f"Created {file_path} on {branch_name}")
             except Exception as e:
-                log.warning(f"Failed to push {file_path}: {e}")
+                log.error(f"Failed to push {file_path}: {e}")
+                failed.append(file_path)
+
+    if failed:
+        raise RuntimeError(
+            f"Failed to push {len(failed)} file(s) to branch '{branch_name}': {failed}. "
+            "PR was not opened to avoid creating an empty changeset."
+        )
