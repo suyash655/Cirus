@@ -46,8 +46,8 @@ class IncidentService:
 
     async def create_incident(
         self, payload: IncidentCreate
-    ) -> Tuple[Incident, str]:
-        """Create a new incident and return (incident, run_id placeholder)."""
+    ) -> Incident:
+        """Create a new incident and return the created Incident object."""
         # Derive title from first non-empty line of raw text
         lines = [l.strip() for l in payload.raw_text.strip().splitlines() if l.strip()]
         title = lines[0].lstrip("#").strip()[:120] if lines else "Untitled Incident"
