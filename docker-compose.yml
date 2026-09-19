@@ -1,6 +1,49 @@
 version: '3.8'
 
 services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: cirus-backend
+    ports:
+      - "8000:8000"
+    environment:
+      - ENVIRONMENT=development
+      - MODE=mock
+      - DATABASE_URL=sqlite+aiosqlite:///./cirus_dev.db
+      - LLM_PROVIDER=mock
+      - REDIS_URL=redis://redis:6379/0
+      - CORS_ORIGINS=http://localhost:3000
+    volumes:
+      - ./backend:/app
+      - backend_db:/app/cirus_dev.db
+    depends_on:
+      - redis
+    networks:
+      - cirus-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+    container_name: cirus-frontend
+    ports:
+      - "3000:3000"
+    environment:
+      - NEXT_PUBLIC_API_URL=http://localhost:8000
+      - NEXT_PUBLIC_API_KEY=dev-api-key-12345
+      - NEXT_PUBLIC_USE_MOCKS=false
+    depends_on:
+      - backend
+    networks:
+      - cirus-network
+
   temporal:
     image: temporalio/admin-tools:1.22.3
     container_name: temporal
@@ -34,3 +77,4 @@ networks:
 
 volumes:
   redis_data:
+  backend_db:
