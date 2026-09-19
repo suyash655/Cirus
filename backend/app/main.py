@@ -14,6 +14,7 @@ from app.api.v1.router import api_router
 from app.core.config import settings
 from app.core.errors import CIRUSException, cirus_exception_handler
 from app.core.logging import configure_logging, get_logger
+from app.core.security import validate_secret_key
 from app.db.session import engine
 from app.db.base import Base
 
@@ -23,6 +24,7 @@ log = get_logger(__name__)
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     configure_logging()
+    validate_secret_key()  # Raises if placeholder secret used outside development
     log.info(
         "CIRUS backend starting",
         environment=settings.ENVIRONMENT,

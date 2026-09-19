@@ -23,7 +23,7 @@ class Settings(BaseSettings):
     # ── App ───────────────────────────────────────────────────────────────────
     ENVIRONMENT: Literal["development", "staging", "production"] = "development"
     MODE: Literal["mock", "live"] = "mock"
-    SECRET_KEY: str = "changeme-dev-secret-key"
+    SECRET_KEY: str = "CHANGE_ME_USE_STRONG_SECRET_IN_PRODUCTION"
     API_KEY_HEADER: str = "X-API-Key"
     ALLOWED_API_KEYS: str = ""
 
