@@ -8,7 +8,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.security import require_api_key
 from app.core.config import settings
-from app.db.session import get_db
+from app.core.logging import get_logger
+from app.db.session import get_db, AsyncSessionLocal
 from app.schemas.incident import (
     IncidentCreate,
     IncidentCreateResponse,
@@ -22,6 +23,8 @@ from app.services.workflow_service import WorkflowService
 
 router = APIRouter(prefix="/incidents", tags=["incidents"])
 
+log = get_logger(__name__)
+
 
 def _incident_svc(db: AsyncSession = Depends(get_db)) -> IncidentService:
     return IncidentService(db)
@@ -29,6 +32,32 @@ def _incident_svc(db: AsyncSession = Depends(get_db)) -> IncidentService:
 
 def _workflow_svc(db: AsyncSession = Depends(get_db)) -> WorkflowService:
     return WorkflowService(db)
+
+
+async def _run_pipeline_bg(
+    run_id: str,
+    incident_id: str,
+    raw_text: str,
+    selected_artifacts: list,
+) -> None:
+    """Background pipeline runner.
+
+    Opens its own DB session so it is fully decoupled from the request
+    session. Uses FastAPI BackgroundTasks (not asyncio.create_task) so
+    the ASGI server waits for this coroutine to finish before recycling
+    the connection. Incidents stuck in 'processing' on shutdown will be
+    retried by Temporal when it is enabled.
+    """
+    from app.orchestrator.pipeline import CIRUSPipeline
+
+    async with AsyncSessionLocal() as _db:
+        try:
+            pipeline = CIRUSPipeline(_db)
+            await pipeline.run(run_id, incident_id, raw_text, selected_artifacts)
+            await _db.commit()
+        except Exception as exc:
+            await _db.rollback()
+            log.error("background pipeline error", run_id=run_id, error=str(exc))
 
 
 @router.post(
@@ -54,7 +83,7 @@ async def create_incident(
         triggered_by="auto",
     )
 
-    # Try Temporal first; fall back to asyncio background task if unavailable
+    # Try Temporal first; fall back to BackgroundTasks if unavailable
     temporal_ok = False
     try:
         from app.orchestrator.temporal_client import get_temporal_client
@@ -73,39 +102,19 @@ async def create_incident(
             task_queue="cirus-task-queue",
         )
         temporal_ok = True
+        log.info("temporal workflow started", run_id=run.id, incident_id=incident.id)
     except Exception as e:
-        import logging
-        _log = logging.getLogger(__name__)
-        _log.warning(f"Temporal unavailable ({e}), falling back to asyncio pipeline")
+        log.warning("temporal unavailable, falling back to BackgroundTasks", error=str(e))
 
     if not temporal_ok:
-        import asyncio
-        from app.db.session import AsyncSessionLocal
-        from app.orchestrator.pipeline import CIRUSPipeline
-
-        async def _run_pipeline_bg(
-            run_id: str,
-            incident_id: str,
-            raw_text: str,
-            selected_artifacts: list,
-        ) -> None:
-            async with AsyncSessionLocal() as _db:
-                try:
-                    pipeline = CIRUSPipeline(_db)
-                    await pipeline.run(run_id, incident_id, raw_text, selected_artifacts)
-                    await _db.commit()
-                except Exception as exc:
-                    await _db.rollback()
-                    import logging
-                    logging.getLogger(__name__).error(f"Background pipeline error: {exc}")
-
-        asyncio.create_task(
-            _run_pipeline_bg(
-                run.id,
-                incident.id,
-                payload.raw_text,
-                payload.selected_artifacts or [],
-            )
+        # Use FastAPI BackgroundTasks — the ASGI server tracks these properly,
+        # unlike bare asyncio.create_task() which is silently dropped on shutdown.
+        background_tasks.add_task(
+            _run_pipeline_bg,
+            run.id,
+            incident.id,
+            payload.raw_text,
+            payload.selected_artifacts or [],
         )
 
     return IncidentCreateResponse(id=incident.id, estimated_processing_ms=8000)
