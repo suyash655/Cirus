@@ -49,6 +49,7 @@ jobs:
           ALLOWED_API_KEYS: "ci-test-key"
         run: |
           cd $GITHUB_WORKSPACE
+          export PYTHONPATH=$GITHUB_WORKSPACE/backend
           pytest mlops/evaluation/test_golden_dataset.py \
             -v \
             --tb=short \
@@ -105,5 +106,6 @@ jobs:
       - name: Run adversarial validator tests
         run: |
           cd $GITHUB_WORKSPACE
+          export PYTHONPATH=$GITHUB_WORKSPACE/backend
           pytest mlops/evaluation/test_golden_dataset.py::TestAdversarialValidators \
             -v --tb=short
