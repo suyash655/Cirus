@@ -123,7 +123,7 @@ export default function DashboardPage() {
               <p className="c-metric-value-hero tabular-nums mt-2">
                 {stats?.totalIncidents ?? incidents.length}
               </p>
-              <p className="c-metric-delta mt-1">↑ 8% vs last period</p>
+              <p className="c-metric-delta mt-1">↑ vs last period (no historical data yet)</p>
             </>
           )}
         </div>
@@ -150,7 +150,6 @@ export default function DashboardPage() {
           label="Guardrails generated"
           state={tileState}
           value={stats?.guardrailsGenerated ?? ready.length}
-          delta="↑ 12% vs last period"
         />
 
         {/* Awaiting approval */}
