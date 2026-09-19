@@ -33,8 +33,9 @@ class IncidentCreate(BaseModel):
     raw_text: str = Field(
         ...,
         min_length=10,
+        max_length=100_000,
         validation_alias=AliasChoices("raw_text", "rawText"),
-        description="Raw incident log text or structured report.",
+        description="Raw incident log text or structured report (max 100,000 characters).",
     )
     input_method: InputMethod = Field(
         default="paste",
