@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.logging import get_logger
 from app.models.run import WorkflowRunStatus
 from app.orchestrator import stages as stage_runners
+from app.orchestrator.constants import StageID
 from app.orchestrator.state import PipelineState, StageState
 from app.orchestrator.stages import _build_initial_stages
 from app.repositories.citation_repository import CitationRepository
@@ -68,39 +69,39 @@ class CIRUSPipeline:
 
         try:
             # ── Stage 1: Normalization ────────────────────────────────────────
-            await self._run_stage(state, "normalization", run_id)
+            await self._run_stage(state, StageID.NORMALIZATION, run_id)
             await stage_runners.run_normalization(state, self._llm)
             await self._persist_stages(run_id, state)
 
             # ── Stage 2: Root Cause Classification ────────────────────────────
-            await self._run_stage(state, "root-cause-classification", run_id)
+            await self._run_stage(state, StageID.ROOT_CAUSE, run_id)
             await stage_runners.run_root_cause(state, self._llm)
             await self._persist_stages(run_id, state)
 
             # ── Stage 3: Context Enrichment ───────────────────────────────────
-            await self._run_stage(state, "context-enrichment", run_id)
+            await self._run_stage(state, StageID.CONTEXT_ENRICHMENT, run_id)
             await stage_runners.run_context_enrichment(state, self._firecrawl)
             await self._persist_stages(run_id, state)
 
             # ── Stage 4: Artifact Generation ──────────────────────────────────
-            await self._run_stage(state, "artifact-generation", run_id)
+            await self._run_stage(state, StageID.ARTIFACT_GENERATION, run_id)
             await stage_runners.run_artifact_generation(
                 state, self._llm, self._artifact_svc
             )
             await self._persist_stages(run_id, state)
 
             # ── Stage 5: Validator / Critic ───────────────────────────────────
-            await self._run_stage(state, "validator-critic", run_id)
+            await self._run_stage(state, StageID.VALIDATOR_CRITIC, run_id)
             await stage_runners.run_validator(state, self._llm)
             await self._persist_stages(run_id, state)
 
             # ── Stage 6: Risk Scoring ─────────────────────────────────────────
-            await self._run_stage(state, "risk-scoring", run_id)
+            await self._run_stage(state, StageID.RISK_SCORING, run_id)
             await stage_runners.run_risk_scoring(state, self._llm, self._wolfram)
             await self._persist_stages(run_id, state)
 
             # ── Stage 7: Citation Extraction ──────────────────────────────────
-            await self._run_stage(state, "citation-extraction", run_id)
+            await self._run_stage(state, StageID.CITATION_EXTRACTION, run_id)
             await stage_runners.run_citation_extraction(state, self._llm)
             await self._persist_stages(run_id, state)
 

@@ -94,8 +94,9 @@ class DashboardService:
                 continue
 
             # Find the risk-scoring stage output
+            from app.orchestrator.constants import StageID
             risk_stage = next(
-                (s for s in stages if isinstance(s, dict) and s.get("id") == "risk-scoring"),
+                (s for s in stages if isinstance(s, dict) and s.get("id") == StageID.RISK_SCORING),
                 None,
             )
             if not risk_stage:
