@@ -5,7 +5,7 @@ import enum
 from datetime import datetime
 from typing import TYPE_CHECKING, List, Optional
 
-from sqlalchemy import DateTime, Enum, String, Text, func
+from sqlalchemy import DateTime, Enum, Index, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
@@ -46,23 +46,29 @@ class Incident(Base):
     raw_text: Mapped[str] = mapped_column(Text)
     detected_format: Mapped[str] = mapped_column(String(20), default="plain")
     severity: Mapped[Severity] = mapped_column(
-        Enum(Severity, native_enum=False), default=Severity.P3
+        Enum(Severity, native_enum=False), default=Severity.P3, index=True
     )
     provider: Mapped[CloudProvider] = mapped_column(
-        Enum(CloudProvider, native_enum=False), default=CloudProvider.Generic
+        Enum(CloudProvider, native_enum=False), default=CloudProvider.Generic, index=True
     )
     status: Mapped[IncidentStatus] = mapped_column(
-        Enum(IncidentStatus, native_enum=False), default=IncidentStatus.processing
+        Enum(IncidentStatus, native_enum=False), default=IncidentStatus.processing, index=True
     )
     # JSON arrays stored as text for SQLite compatibility
     tags: Mapped[Optional[str]] = mapped_column(Text, nullable=True, default="[]")
     artifacts_ready: Mapped[Optional[str]] = mapped_column(Text, nullable=True, default="[]")
     file_name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
-        DateTime, server_default=func.now(), nullable=False
+        DateTime, server_default=func.now(), nullable=False, index=True
     )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+
+    # Composite index for the most common dashboard query: filter by status,
+    # order by created_at — covers list_all() and count_by_status().
+    __table_args__ = (
+        Index("ix_incidents_status_created", "status", "created_at"),
     )
 
     # Relationships
