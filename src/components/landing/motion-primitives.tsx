@@ -21,8 +21,7 @@ export function Reveal({ children, className, delay = 0, ...props }: RevealProps
   return (
     <motion.div
       initial={prefersReducedMotion ? { opacity: 0 } : fadeUp.initial}
-      whileInView={prefersReducedMotion ? { opacity: 1 } : fadeUp.animate}
-      viewport={{ once: true, amount: 0.2 }}
+      animate={prefersReducedMotion ? { opacity: 1 } : fadeUp.animate}
       transition={{ 
         ...fadeUp.transition, 
         delay: prefersReducedMotion ? 0 : delay,
@@ -58,8 +57,7 @@ export function StaggerGroup({
         return (
           <motion.div
             initial={prefersReducedMotion ? { opacity: 0 } : { opacity: 0, y: 16 }}
-            whileInView={prefersReducedMotion ? { opacity: 1 } : { opacity: 1, y: 0 }}
-            viewport={{ once: true, margin: '-50px' }}
+            animate={prefersReducedMotion ? { opacity: 1 } : { opacity: 1, y: 0 }}
             transition={{ 
               delay: prefersReducedMotion ? 0 : initialDelay + i * delayStep, 
               duration: prefersReducedMotion ? 0.01 : duration.standard, 
@@ -230,7 +228,7 @@ export function SlideIn({ children, className, direction = 'up', delay = 0 }: Sl
     <motion.div
       initial={variants[direction]}
       whileInView={prefersReducedMotion ? { opacity: 1 } : { x: 0, y: 0, opacity: 1 }}
-      viewport={{ once: true, amount: 0.2 }}
+      viewport={{ once: true, amount: 0.15 }}
       transition={{ duration: prefersReducedMotion ? 0.01 : duration.standard, ease: prefersReducedMotion ? 'linear' : ease, delay: prefersReducedMotion ? 0 : delay }}
       className={className}
     >
