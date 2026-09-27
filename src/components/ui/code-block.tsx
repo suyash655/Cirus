@@ -33,7 +33,7 @@ function CodeBlock({
     if (downloadAs) downloadFile(code, downloadAs);
   };
 
-  const lines = code.split('\n');
+  const lines = React.useMemo(() => code.split('\n'), [code]);
 
   return (
     <div
