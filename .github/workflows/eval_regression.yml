@@ -20,7 +20,7 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2 (SHA-pinned per INC-049)
 
       - name: Set up Python 3.11
-        uses: actions/setup-python@0a5c61591373683505ea898e09a3ea4f39ef2b9f  # v5.0.0
+        uses: actions/setup-python@v5  # v5
         with:
           python-version: '3.11'
           cache: 'pip'
@@ -61,7 +61,7 @@ jobs:
 
       - name: Upload eval report
         if: always()
-        uses: actions/upload-artifact@26f96dfa2b179fd5c8984a8e73ae1ef08f76c888  # v4.3.0
+        uses: actions/upload-artifact@v4  # v4
         with:
           name: eval-report-${{ github.run_number }}
           path: |
@@ -87,7 +87,7 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
 
       - name: Set up Python 3.11
-        uses: actions/setup-python@0a5c61591373683505ea898e09a3ea4f39ef2b9f
+        uses: actions/setup-python@v5  # v5
         with:
           python-version: '3.11'
           cache: 'pip'
