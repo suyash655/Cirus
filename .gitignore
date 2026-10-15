@@ -1,25 +1,58 @@
+# ── Node / Next.js ────────────────────────────────────────────────────────────
 node_modules/
 .next/
+dist/
+build/
+tsconfig.tsbuildinfo
+
+# ── Python ────────────────────────────────────────────────────────────────────
 .venv/
 __pycache__/
 *.py[cod]
+*.pyo
+*.pyd
+.Python
+
+# ── Database files (runtime state — never commit) ─────────────────────────────
 *.db
 *.sqlite
 *.sqlite3
+
+# ── Environment / secrets (NEVER commit real credentials) ────────────────────
 .env
 .env.*
 !.env.example
-exports/
-tsconfig.tsbuildinfo
+
+# ── Runtime output directories ────────────────────────────────────────────────
+exports/           # ZIP export artifacts generated at runtime
+mlruns/            # MLflow local experiment tracking data
+mlflow.db          # MLflow SQLite backend (if using local tracking)
+mlflow-artifacts/  # MLflow artifact store
+
+# ── Evaluation / testing cache ────────────────────────────────────────────────
+.deepeval/         # DeepEval cache and result files
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
-dist/
-build/
+htmlcov/           # pytest-cov HTML coverage reports
+.coverage
+coverage.xml
 
-# Temporal binaries and archives
+# ── Temporal CLI binaries and archives ────────────────────────────────────────
+# Download from: https://github.com/temporalio/cli/releases
 temporal.exe
 temporal*.zip
 temporal_bin/
 temporal_bin*/
 temporal_cli/
+
+# ── OS / IDE ──────────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+.vscode/settings.json
+.idea/
+*.swp
+*.swo
+
+# ── pip-compile artifacts (tracked in future push 10) ────────────────────────
+# requirements.txt is currently hand-maintained; lockfile added in feat/pip-compile

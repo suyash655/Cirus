@@ -183,9 +183,12 @@ Frontend is live at `http://localhost:3000`
 ### 4. Submit a test incident
 
 ```bash
+# The default dev key is set in .env.example — export it or substitute directly
+export CIRUS_API_KEY="dev-api-key-12345"   # matches ALLOWED_API_KEYS default in .env.example
+
 curl -X POST http://localhost:8000/api/v1/incidents/ \
   -H "Content-Type: application/json" \
-  -H "X-API-Key: dev-api-key-12345" \
+  -H "X-API-Key: $CIRUS_API_KEY" \
   -d '{
     "raw_text": "P1 Incident — payments-api 503 rate 94%\n\nRDS CPU maxed at 99%. New DB migration in v2.4.1 added missing index on transactions table, causing full table scans under production load.\n\nTimeline:\n14:10 - Deployment completed\n14:12 - CloudWatch alarm fired\n14:22 - Rollback initiated\n14:31 - Service recovered",
     "severity": "P1",
