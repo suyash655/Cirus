@@ -349,6 +349,15 @@ The CI pipeline (`eval_regression.yml`) runs this on every PR and blocks merges 
 
 ---
 
+## Security
+
+See [SECURITY.md](SECURITY.md) for the full security policy, including:
+- Why the `dev-api-key-12345` in `.env.example` is intentional (not a leaked credential)
+- All credentials to rotate before any real deployment
+- Responsible disclosure process for reporting vulnerabilities
+
+---
+
 ## License
 
 MIT — see [LICENSE](LICENSE) for details.
