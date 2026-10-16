@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import json
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -42,8 +42,18 @@ class ArtifactService:
         raw_text: str,
         root_cause: dict,
         extraction: dict,
-    ) -> dict:
-        """Generate a single artifact via LLM and persist it."""
+    ) -> Tuple[dict, str]:
+        """Generate a single artifact via LLM, persist it, and return
+        (content_dict, raw_code_str).
+
+        raw_code_str is the validatable code string extracted from the content:
+          - policy  → content["code"]    (Rego)
+          - iac     → content["fullPatch"] (Terraform HCL)
+          - others  → "" (no syntax validator applies)
+
+        The caller (run_artifact_generation in stages.py) stores raw_code_str
+        in state.artifact_content[artifact_type] for the Validator/Critic stage.
+        """
         prompt_method = _ARTIFACT_PROMPT_MAP.get(artifact_type)
         if not prompt_method:
             raise ArtifactGenerationError(artifact_type, f"Unknown artifact type: {artifact_type}")
@@ -96,7 +106,17 @@ class ArtifactService:
             tokens_used=response.tokens_used,
         )
         log.info("artifact generated", incident_id=incident_id, type=artifact_type, version=artifact.version)
-        return content
+
+        # Extract the raw validatable code string for the Validator/Critic stage.
+        # Only policy (Rego) and iac (Terraform) have syntax-checkable code.
+        # All other artifact types produce prose — no hard parser applies.
+        raw_code: str = ""
+        if artifact_type == "policy":
+            raw_code = content.get("code", "")
+        elif artifact_type == "iac":
+            raw_code = content.get("fullPatch", "")
+
+        return content, raw_code
 
     async def get_artifact_set(self, incident_id: str) -> ArtifactSetRead:
         artifacts = await self._repo.list_by_incident(incident_id)
@@ -125,7 +145,7 @@ class ArtifactService:
         root_cause: dict,
         extraction: dict,
     ) -> ArtifactRead:
-        content = await self.generate_artifact(
+        content, _raw_code = await self.generate_artifact(
             incident_id=incident_id,
             artifact_type=artifact_type,
             raw_text=raw_text,

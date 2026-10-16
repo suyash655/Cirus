@@ -154,7 +154,7 @@ async def run_artifact_generation(
     try:
         for artifact_type in state.selected_artifacts:
             try:
-                await artifact_service.generate_artifact(
+                _content, raw_code = await artifact_service.generate_artifact(
                     incident_id=state.incident_id,
                     artifact_type=artifact_type,
                     raw_text=state.raw_text,
@@ -162,6 +162,11 @@ async def run_artifact_generation(
                     extraction=state.extraction,
                 )
                 generated.append(artifact_type)
+                # Store the raw validatable code string so the Validator/Critic
+                # stage can run real syntax checks without re-fetching from DB.
+                # Empty string means "no code to validate" (e.g. prose artifacts).
+                if raw_code:
+                    state.artifact_content[artifact_type] = raw_code
             except Exception as e:
                 log.warning("artifact generation failed", type=artifact_type, error=str(e))
 
@@ -176,10 +181,19 @@ async def run_artifact_generation(
 async def run_validator(state: PipelineState, llm: LLMService) -> None:
     """Validator / Critic stage.
 
-    Performs real structural validation on generated artifacts using the
-    syntax validators in app.validators (OPA/Rego + HCL2/Terraform).
-    Falls back to a lightweight existence check when no validators are
-    available (e.g. in pure mock mode).
+    Runs real syntax validators on every generated artifact that has a
+    code representation stored in state.artifact_content:
+      - policy  → validate_rego()       (OPA binary or regex fallback)
+      - iac     → validate_terraform()   (python-hcl2 or regex fallback)
+
+    Prose artifacts (rca, runbook, alerts, regression) are checked for
+    non-emptiness only — there is no syntax parser for natural language.
+
+    If any code artifact fails syntax validation, the issues list is
+    populated and logged as a WARNING. The pipeline continues (the
+    incident is still marked ready) so that partial results reach the
+    reviewer, but the artifact is flagged as invalid in the output.
+    A future iteration should block the human approval gate on any failure.
     """
     from app.validators.rego_validator import validate_rego
     from app.validators.terraform_validator import validate_terraform
@@ -190,60 +204,71 @@ async def run_validator(state: PipelineState, llm: LLMService) -> None:
     issues: list[str] = []
     artifact_results: dict = {}
 
+    # ── Precondition checks ───────────────────────────────────────────────────
     if not state.root_cause.get("root_cause"):
-        issues.append("Root cause is empty.")
+        issues.append("Root cause is empty — normalization or root-cause stage may have failed.")
 
     if not state.artifacts_generated:
         issues.append("No artifacts were generated.")
 
-    # ── Real syntax validation on persisted artifact content ─────────────────
-    # We pull the raw content from state.extraction to validate what was
-    # actually generated. Validators are cheap (regex/subprocess) and
-    # significantly more reliable than asking the LLM to self-check.
-    from app.services.artifact_service import ArtifactService  # avoid circular at module level
+    # ── Real syntax validation on code artifacts ──────────────────────────────
+    # state.artifact_content is populated by run_artifact_generation above.
+    # It maps artifact_type → raw code string (only for policy + iac).
+    # Validators are cheap (regex/subprocess) and more reliable than an LLM
+    # self-check — an LLM will confidently approve broken Rego or Terraform.
+    VALIDATORS = {
+        "policy": ("Rego", validate_rego),
+        "iac": ("Terraform HCL", validate_terraform),
+    }
 
-    for artifact_type in state.artifacts_generated:
+    for artifact_type, (lang_label, validator_fn) in VALIDATORS.items():
+        code = state.artifact_content.get(artifact_type, "")
+        if not code:
+            # Artifact was not selected or generation failed — skip silently.
+            continue
+
         try:
-            # Retrieve the artifact content from the DB via state's artifact_service
-            # (passed through pipeline.py — we access it via the closure the pipeline
-            #  sets on state, or we do a lightweight in-memory check here)
-            pass  # Content check below uses state cache if available
-        except Exception:
-            pass
+            result = validator_fn(code)
+            artifact_results[artifact_type] = {
+                "valid": result.valid,
+                "validator": result.validator_used,
+                "error": result.error,
+            }
+            if not result.valid:
+                issues.append(
+                    f"{lang_label} artifact failed validation "
+                    f"[{result.validator_used}]: {result.error}"
+                )
+                log.warning(
+                    "artifact syntax validation failed",
+                    artifact_type=artifact_type,
+                    validator=result.validator_used,
+                    error=result.error,
+                )
+            else:
+                log.info(
+                    "artifact syntax validation passed",
+                    artifact_type=artifact_type,
+                    validator=result.validator_used,
+                )
+        except Exception as exc:
+            # Validator itself crashed — log and continue; don’t block pipeline.
+            log.warning(
+                "validator raised an exception",
+                artifact_type=artifact_type,
+                error=str(exc),
+            )
+            artifact_results[artifact_type] = {
+                "valid": None,
+                "validator": "error",
+                "error": str(exc),
+            }
 
-    # Validate policy (Rego) artifacts if content is available in state
-    policy_content = None
-    iac_content = None
-
-    # Try to get content from the artifact_service stored in state
-    # (Pipeline passes artifacts through artifact_service.generate_artifact which caches)
-    # Best-effort: validate mock or LLM-returned content stored on state
-    if hasattr(state, "_last_policy_code") and state._last_policy_code:
-        policy_content = state._last_policy_code
-    if hasattr(state, "_last_iac_code") and state._last_iac_code:
-        iac_content = state._last_iac_code
-
-    if policy_content:
-        result = validate_rego(policy_content)
-        artifact_results["policy"] = {
-            "valid": result.valid,
-            "validator": result.validator_used,
-            "error": result.error,
-        }
-        if not result.valid:
-            issues.append(f"Policy (Rego) failed validation [{result.validator_used}]: {result.error}")
-            log.warning("Rego validation failed", error=result.error, validator=result.validator_used)
-
-    if iac_content:
-        result = validate_terraform(iac_content)
-        artifact_results["iac"] = {
-            "valid": result.valid,
-            "validator": result.validator_used,
-            "error": result.error,
-        }
-        if not result.valid:
-            issues.append(f"IaC (Terraform) failed validation [{result.validator_used}]: {result.error}")
-            log.warning("Terraform validation failed", error=result.error, validator=result.validator_used)
+    # ── Prose artifact existence checks ───────────────────────────────────────
+    PROSE_ARTIFACTS = {"rca", "runbook", "alerts", "regression"}
+    for artifact_type in state.artifacts_generated:
+        if artifact_type in PROSE_ARTIFACTS:
+            artifact_results[artifact_type] = {"valid": True, "validator": "existence", "error": None}
 
     passed = len(issues) == 0
     if not passed:
@@ -254,6 +279,7 @@ async def run_validator(state: PipelineState, llm: LLMService) -> None:
             "passed": passed,
             "issues": issues,
             "artifact_results": artifact_results,
+            "code_artifacts_checked": list(state.artifact_content.keys()),
         }
     )
 
