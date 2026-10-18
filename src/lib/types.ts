@@ -401,4 +401,20 @@ export interface GitOpsPRResult {
   createdAt: string;
 }
 
+// ─── Similarity & Vector Store ───────────────────────────────────────────────
+
+export interface SimilarIncidentHit {
+  incidentId: string;
+  rawTextSnippet: string;
+  metadata: Record<string, unknown>;
+  distance: number;
+  similarityPct: number;
+}
+
+export interface SimilarIncidentsResponse {
+  incidentId: string;
+  total: number;
+  similar: SimilarIncidentHit[];
+}
+
 

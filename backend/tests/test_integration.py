@@ -31,6 +31,11 @@ os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
 os.environ.setdefault("ALLOWED_API_KEYS", "test-key-123")
 os.environ.setdefault("SECRET_KEY", "test-secret-key-for-integration-tests")
 
+from app.core.config import settings  # noqa: E402
+settings.ALLOWED_API_KEYS = "test-key-123"
+settings.MODE = "mock"
+settings.ENVIRONMENT = "development"
+
 from app.main import app  # noqa: E402 — import after env setup
 from app.db.base import Base  # noqa: E402
 from app.db.session import engine  # noqa: E402
@@ -54,11 +59,6 @@ SAMPLE_INCIDENT = {
 }
 
 
-@pytest.fixture(scope="session")
-def event_loop():
-    loop = asyncio.new_event_loop()
-    yield loop
-    loop.close()
 
 
 @pytest_asyncio.fixture(scope="session")
@@ -192,12 +192,14 @@ class TestDashboard:
 
     async def test_dashboard_stats_total_increments_after_create(self, client: AsyncClient):
         stats_before = await client.get("/api/v1/dashboard/stats", headers=HEADERS)
-        total_before = stats_before.json().get("totalIncidents", 0)
+        data_before = stats_before.json()
+        total_before = data_before.get("total_incidents", data_before.get("totalIncidents", 0))
 
         await client.post("/api/v1/incidents/", json=SAMPLE_INCIDENT, headers=HEADERS)
 
         stats_after = await client.get("/api/v1/dashboard/stats", headers=HEADERS)
-        total_after = stats_after.json().get("totalIncidents", 0)
+        data_after = stats_after.json()
+        total_after = data_after.get("total_incidents", data_after.get("totalIncidents", 0))
 
         assert total_after == total_before + 1
 

@@ -23,6 +23,8 @@ import type {
   CreatePRPayload,
   GitOpsPRResult,
   IncidentComplianceReport,
+  SimilarIncidentHit,
+  SimilarIncidentsResponse,
 } from './types';
 import { generateId } from './utils';
 
@@ -586,4 +588,21 @@ export async function fetchDashboardData() {
       incidents: [],
     };
   }
+}
+
+export async function getSimilarIncidents(
+  incidentId: string,
+  topK: number = 5,
+): Promise<SimilarIncidentsResponse> {
+  if (!USE_MOCKS) {
+    return camelKeys<SimilarIncidentsResponse>(
+      await apiFetch(`/incidents/${incidentId}/similar?top_k=${topK}`),
+    );
+  }
+
+  return {
+    incidentId,
+    total: 0,
+    similar: [],
+  };
 }

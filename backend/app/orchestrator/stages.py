@@ -162,7 +162,7 @@ async def run_context_enrichment(
                     incident_id=state.incident_id,
                 )
         except Exception as vs_err:
-            log.warning("vector_store: similarity search failed, skipping", error=str(vs_err))
+            log.warning(f"vector_store: similarity search failed ({vs_err}), skipping")
 
         stage.complete(
             output={
@@ -172,7 +172,7 @@ async def run_context_enrichment(
         )
     except Exception as e:
         # Non-fatal — log and skip
-        log.warning("context enrichment failed, skipping", error=str(e))
+        log.warning(f"context enrichment failed ({e}), skipping")
         stage.skip()
 
 

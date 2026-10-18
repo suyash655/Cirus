@@ -6,6 +6,7 @@ from contextlib import asynccontextmanager
 from typing import AsyncIterator
 
 from fastapi import FastAPI, Request
+from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
@@ -94,9 +95,9 @@ async def request_validation_exception_handler(
     log.warning(
         "request validation failed",
         path=request.url.path,
-        errors=exc.errors(),
+        errors=str(exc.errors()),
     )
-    return JSONResponse(status_code=422, content={"detail": exc.errors()})
+    return JSONResponse(status_code=422, content={"detail": jsonable_encoder(exc.errors())})
 
 
 # ── Routers ───────────────────────────────────────────────────────────────────

@@ -137,7 +137,7 @@ class CIRUSPipeline:
                     },
                 )
             except Exception as vs_err:
-                log.warning("vector_store: upsert failed (non-fatal)", error=str(vs_err))
+                log.warning(f"vector_store: upsert failed (non-fatal): {vs_err}")
 
             # ── Mark run completed ────────────────────────────────────────────
             await self._workflow_svc.set_completed(run_id, state.total_tokens)
