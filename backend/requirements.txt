@@ -45,5 +45,7 @@ redis==5.1.0
 pytest==8.3.3
 pytest-asyncio==0.24.0
 
-# NOTE: sentence-transformers was removed — it was listed but never imported,
-# and pulls in ~1.5 GB of PyTorch dependencies for zero benefit.
+# ── Vector Store (incident similarity search) ─────────────────────────────────
+# chromadb ships its own ONNX-based embedding function (all-MiniLM-L6-v2)
+# so sentence-transformers / PyTorch are NOT required.
+chromadb==0.5.23

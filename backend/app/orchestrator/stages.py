@@ -128,14 +128,47 @@ async def run_context_enrichment(
     stage = _get_stage(state, StageID.CONTEXT_ENRICHMENT)
     stage.start()
     try:
-        # Pull URLs from root cause output if any
+        firecrawl_hits = 0
+        similar_hits = 0
+
+        # ── 1. Firecrawl: enrich from external URLs in root cause refs ────────
         refs = state.root_cause.get("references", [])
         if refs and isinstance(refs, list):
             context = await firecrawl.enrich_from_urls(refs[:3])
             state.enrichment_context = context
+            firecrawl_hits = len(context)
+
+        # ── 2. Vector store: find similar past incidents ───────────────────────
+        try:
+            from app.services.vector_store import query_similar
+            similar = await query_similar(
+                query_text=state.raw_text,
+                exclude_id=state.incident_id,
+            )
+            if similar:
+                # Inject similar incidents as enrichment context entries
+                for hit in similar:
+                    state.enrichment_context.append({
+                        "source": "cirus-history",
+                        "incident_id": hit["incident_id"],
+                        "snippet": hit["raw_text_snippet"],
+                        "similarity_pct": hit["similarity_pct"],
+                        "metadata": hit.get("metadata", {}),
+                    })
+                similar_hits = len(similar)
+                log.info(
+                    "vector_store: injected similar incidents into context",
+                    count=similar_hits,
+                    incident_id=state.incident_id,
+                )
+        except Exception as vs_err:
+            log.warning("vector_store: similarity search failed, skipping", error=str(vs_err))
 
         stage.complete(
-            output={"enriched_sources": len(state.enrichment_context)},
+            output={
+                "enriched_sources": firecrawl_hits,
+                "similar_incidents": similar_hits,
+            },
         )
     except Exception as e:
         # Non-fatal — log and skip

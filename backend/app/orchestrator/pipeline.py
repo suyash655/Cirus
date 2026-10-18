@@ -122,6 +122,23 @@ class CIRUSPipeline:
             # ── Mark incident ready ───────────────────────────────────────────
             await self._incident_svc.mark_ready(incident_id, state.artifacts_generated)
 
+            # ── Upsert into vector store for future similarity search ─────────
+            try:
+                from app.services.vector_store import upsert_incident
+                await upsert_incident(
+                    incident_id=incident_id,
+                    raw_text=raw_text,
+                    metadata={
+                        "severity": state.extraction.get("detected_severity", ""),
+                        "provider": state.extraction.get("provider", ""),
+                        "root_cause": str(state.root_cause.get("root_cause", ""))[:200],
+                        "artifacts": ",".join(state.artifacts_generated),
+                        "status": "ready",
+                    },
+                )
+            except Exception as vs_err:
+                log.warning("vector_store: upsert failed (non-fatal)", error=str(vs_err))
+
             # ── Mark run completed ────────────────────────────────────────────
             await self._workflow_svc.set_completed(run_id, state.total_tokens)
             log.info("pipeline completed", run_id=run_id, tokens=state.total_tokens)

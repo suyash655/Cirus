@@ -83,28 +83,31 @@ async def create_incident(
         triggered_by="auto",
     )
 
-    # Try Temporal first; fall back to BackgroundTasks if unavailable
+    # Try Temporal first (if enabled); fall back to BackgroundTasks if unavailable
     temporal_ok = False
-    try:
-        from app.orchestrator.temporal_client import get_temporal_client
-        from app.orchestrator.temporal_workflows import CIRUSWorkflow
+    if settings.TEMPORAL_ENABLED:
+        try:
+            from app.orchestrator.temporal_client import get_temporal_client
+            from app.orchestrator.temporal_workflows import CIRUSWorkflow
 
-        client = await get_temporal_client()
-        await client.start_workflow(
-            CIRUSWorkflow.run,
-            args=[
-                run.id,
-                incident.id,
-                payload.raw_text,
-                payload.selected_artifacts,
-            ],
-            id=f"cirus-pipeline-{incident.id}-{run.id}",
-            task_queue="cirus-task-queue",
-        )
-        temporal_ok = True
-        log.info("temporal workflow started", run_id=run.id, incident_id=incident.id)
-    except Exception as e:
-        log.warning("temporal unavailable, falling back to BackgroundTasks", error=str(e))
+            client = await get_temporal_client()
+            await client.start_workflow(
+                CIRUSWorkflow.run,
+                args=[
+                    run.id,
+                    incident.id,
+                    payload.raw_text,
+                    payload.selected_artifacts,
+                ],
+                id=f"cirus-pipeline-{incident.id}-{run.id}",
+                task_queue=settings.TEMPORAL_TASK_QUEUE,
+            )
+            temporal_ok = True
+            log.info("temporal workflow started", run_id=run.id, incident_id=incident.id)
+        except Exception as e:
+            log.warning("temporal unavailable, falling back to BackgroundTasks", error=str(e))
+    else:
+        log.debug("temporal disabled (TEMPORAL_ENABLED=false), using BackgroundTasks")
 
     if not temporal_ok:
         # Use FastAPI BackgroundTasks — the ASGI server tracks these properly,
@@ -184,3 +187,46 @@ async def delete_incident(
     svc: IncidentService = Depends(_incident_svc),
 ):
     await svc.delete_incident(incident_id)
+    # Remove from vector store (non-fatal if it fails)
+    try:
+        from app.services.vector_store import delete_incident as vs_delete
+        await vs_delete(incident_id)
+    except Exception as e:
+        log.warning("vector_store: delete failed (non-fatal)", error=str(e))
+
+
+@router.get(
+    "/{incident_id}/similar",
+    summary="Find semantically similar past incidents",
+    dependencies=[Depends(require_api_key)],
+)
+async def get_similar_incidents(
+    incident_id: str,
+    top_k: int = Query(default=5, le=20, description="Number of similar incidents to return"),
+    svc: IncidentService = Depends(_incident_svc),
+):
+    """Return the top-k most semantically similar incidents from the vector store.
+
+    Uses the incident's raw_text as the query embedding. Excludes the incident
+    itself from results. Returns an empty list if the vector store is disabled
+    or has no data yet.
+    """
+    incident = await svc.get_incident(incident_id)
+    raw_text = incident.raw_text if hasattr(incident, "raw_text") else ""
+
+    try:
+        from app.services.vector_store import query_similar
+        similar = await query_similar(
+            query_text=raw_text,
+            top_k=top_k,
+            exclude_id=incident_id,
+        )
+    except Exception as e:
+        log.warning("vector_store: similarity query failed", error=str(e))
+        similar = []
+
+    return {
+        "incident_id": incident_id,
+        "total": len(similar),
+        "similar": similar,
+    }

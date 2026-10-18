@@ -40,6 +40,18 @@ class Settings(BaseSettings):
     REDIS_URL: str = "redis://localhost:6379/0"
     CELERY_ENABLED: bool = False
 
+    # ── Temporal ──────────────────────────────────────────────────────────────
+    TEMPORAL_ENABLED: bool = False
+    TEMPORAL_HOST: str = "localhost:7233"
+    TEMPORAL_NAMESPACE: str = "default"
+    TEMPORAL_TASK_QUEUE: str = "cirus-task-queue"
+
+    # ── Vector Store (ChromaDB) ───────────────────────────────────────────────
+    VECTOR_STORE_ENABLED: bool = True
+    VECTOR_STORE_PATH: str = "./chroma_db"  # Persistent local ChromaDB directory
+    VECTOR_STORE_COLLECTION: str = "cirus_incidents"
+    VECTOR_STORE_TOP_K: int = 3  # How many similar incidents to surface
+
     # ── LLM ───────────────────────────────────────────────────────────────────
     LLM_PROVIDER: Literal["featherless", "groq", "openai", "anthropic", "mock"] = "mock"
     FEATHERLESS_API_KEY: str = ""
