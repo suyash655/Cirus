@@ -11,6 +11,7 @@ from app.services.prompt_service import PromptService
 from app.services.firecrawl_service import FirecrawlService
 from app.services.wolfram_service import WolframService
 from app.utils.json_repair import parse_llm_json, safe_json_loads
+from app.utils.pii_scrub import scrub_pii
 
 log = get_logger(__name__)
 
@@ -75,7 +76,11 @@ async def run_normalization(state: PipelineState, llm: LLMService) -> None:
     stage = _get_stage(state, StageID.NORMALIZATION)
     stage.start()
     try:
-        prompt = prompts.extraction_prompt(state.raw_text)
+        # Scrub PII before sending to any external AI service.
+        # The original state.raw_text is preserved in the DB; only the
+        # AI sees the redacted version.
+        state.safe_text = scrub_pii(state.raw_text)
+        prompt = prompts.extraction_prompt(state.safe_text)
         response = await llm.complete(
             messages=[LLMMessage(role="user", content=prompt)],
             system=prompts.system_prompt,
