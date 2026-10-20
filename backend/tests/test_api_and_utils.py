@@ -101,3 +101,21 @@ def test_gitops_service_create_pr():
     assert len(res.files_committed) == 3
     assert res.commit_sha
     assert res.diff_preview is not None
+
+
+def test_pii_scrubber():
+    from app.utils.pii_scrub import scrub_pii
+    text = (
+        "Incident: user admin@example.com logged into AWS account 123456789012 "
+        "from IP 192.168.1.50 using key gsk_abcdef123456789012345678. "
+        "Resource affected: arn:aws:iam::123456789012:role/DataRole."
+    )
+    scrubbed = scrub_pii(text)
+    assert "admin@example.com" not in scrubbed
+    assert "[EMAIL]" in scrubbed
+    assert "192.168.1.50" not in scrubbed
+    assert "[IP_ADDRESS]" in scrubbed
+    assert "123456789012" not in scrubbed
+    assert "[ACCOUNT_ID]" in scrubbed
+    assert "gsk_abcdef123456789012345678" not in scrubbed
+    assert "[API_KEY]" in scrubbed
