@@ -191,16 +191,21 @@ async def run_artifact_generation(
     stage.start()
     generated = []
     try:
+        safe_text = state.safe_text or scrub_pii(state.raw_text)
         for artifact_type in state.selected_artifacts:
             try:
-                await artifact_service.generate_artifact(
+                # generate_artifact now returns (content_dict, raw_code_str)
+                _content, raw_code = await artifact_service.generate_artifact(
                     incident_id=state.incident_id,
                     artifact_type=artifact_type,
-                    raw_text=state.raw_text,
+                    raw_text=safe_text,
                     root_cause=state.root_cause,
                     extraction=state.extraction,
                 )
                 generated.append(artifact_type)
+                # Store raw code so the validator stage can inspect it without a DB round-trip.
+                if raw_code:
+                    state.artifact_content[artifact_type] = raw_code
             except Exception as e:
                 log.warning("artifact generation failed", type=artifact_type, error=str(e))
 
@@ -215,10 +220,13 @@ async def run_artifact_generation(
 async def run_validator(state: PipelineState, llm: LLMService) -> None:
     """Validator / Critic stage.
 
-    Performs real structural validation on generated artifacts using the
-    syntax validators in app.validators (OPA/Rego + HCL2/Terraform).
-    Falls back to a lightweight existence check when no validators are
-    available (e.g. in pure mock mode).
+    Validates generated code artifacts using real parsers:
+      - Rego policy  : `opa check` binary (if installed) → regex fallback
+      - Terraform IaC: `python-hcl2` parser → regex fallback
+
+    Reads raw code strings from state.artifact_content, which is written by
+    run_artifact_generation() in Stage 4.  Prose artifacts (rca, runbook,
+    alerts, regression) are checked for existence only.
     """
     from app.validators.rego_validator import validate_rego
     from app.validators.terraform_validator import validate_terraform
@@ -230,69 +238,67 @@ async def run_validator(state: PipelineState, llm: LLMService) -> None:
     artifact_results: dict = {}
 
     if not state.root_cause.get("root_cause"):
-        issues.append("Root cause is empty.")
+        issues.append("Root cause is empty — normalization may have failed.")
 
     if not state.artifacts_generated:
         issues.append("No artifacts were generated.")
 
-    # ── Real syntax validation on persisted artifact content ─────────────────
-    # We pull the raw content from state.extraction to validate what was
-    # actually generated. Validators are cheap (regex/subprocess) and
-    # significantly more reliable than asking the LLM to self-check.
-    from app.services.artifact_service import ArtifactService  # avoid circular at module level
+    # ── Validate code artifacts (policy + iac) ────────────────────────────────
+    VALIDATORS = {
+        "policy": ("Rego", validate_rego),
+        "iac": ("Terraform HCL", validate_terraform),
+    }
+    code_artifacts_checked: list[str] = []
 
-    for artifact_type in state.artifacts_generated:
-        try:
-            # Retrieve the artifact content from the DB via state's artifact_service
-            # (passed through pipeline.py — we access it via the closure the pipeline
-            #  sets on state, or we do a lightweight in-memory check here)
-            pass  # Content check below uses state cache if available
-        except Exception:
-            pass
-
-    # Validate policy (Rego) artifacts if content is available in state
-    policy_content = None
-    iac_content = None
-
-    # Try to get content from the artifact_service stored in state
-    # (Pipeline passes artifacts through artifact_service.generate_artifact which caches)
-    # Best-effort: validate mock or LLM-returned content stored on state
-    if hasattr(state, "_last_policy_code") and state._last_policy_code:
-        policy_content = state._last_policy_code
-    if hasattr(state, "_last_iac_code") and state._last_iac_code:
-        iac_content = state._last_iac_code
-
-    if policy_content:
-        result = validate_rego(policy_content)
-        artifact_results["policy"] = {
+    for artifact_type, (label, validator_fn) in VALIDATORS.items():
+        raw_code = state.artifact_content.get(artifact_type, "")
+        if not raw_code:
+            # Not generated or content was empty — skip, do not fail
+            continue
+        result = validator_fn(raw_code)
+        artifact_results[artifact_type] = {
             "valid": result.valid,
             "validator": result.validator_used,
             "error": result.error,
         }
-        if not result.valid:
-            issues.append(f"Policy (Rego) failed validation [{result.validator_used}]: {result.error}")
-            log.warning("Rego validation failed", error=result.error, validator=result.validator_used)
+        code_artifacts_checked.append(artifact_type)
+        if result.valid:
+            log.info(
+                "artifact syntax valid",
+                type=artifact_type,
+                label=label,
+                validator=result.validator_used,
+            )
+        else:
+            issues.append(
+                f"{label} ({artifact_type}) failed [{result.validator_used}]: {result.error}"
+            )
+            log.warning(
+                "artifact syntax invalid",
+                type=artifact_type,
+                label=label,
+                validator=result.validator_used,
+                error=result.error,
+            )
 
-    if iac_content:
-        result = validate_terraform(iac_content)
-        artifact_results["iac"] = {
-            "valid": result.valid,
-            "validator": result.validator_used,
-            "error": result.error,
-        }
-        if not result.valid:
-            issues.append(f"IaC (Terraform) failed validation [{result.validator_used}]: {result.error}")
-            log.warning("Terraform validation failed", error=result.error, validator=result.validator_used)
+    # ── Check prose artifacts exist ───────────────────────────────────────────
+    for artifact_type in ["rca", "runbook", "alerts", "regression"]:
+        if artifact_type in state.artifacts_generated:
+            # These are prose/JSON — no AST validator. Just confirm they were generated.
+            artifact_results[artifact_type] = {"valid": True, "validator": "existence", "error": None}
 
     passed = len(issues) == 0
     if not passed:
         log.warning("validator-critic stage found issues", issues=issues)
+    else:
+        log.info("validator-critic stage passed", checked=code_artifacts_checked)
 
     stage.complete(
         output={
             "passed": passed,
             "issues": issues,
             "artifact_results": artifact_results,
+            "code_artifacts_checked": code_artifacts_checked,
         }
     )
 
