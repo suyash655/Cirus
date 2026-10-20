@@ -50,14 +50,19 @@ def _regex_validate_rego(code: str) -> ValidationResult:
         if not pattern.search(code):
             return ValidationResult(valid=False, error=msg, validator_used="regex")
 
-    # Must have at least one rule definition
-    if not re.search(r"^\s*(allow|deny|violation|warn|\w+)\s*\{", code, re.MULTILINE):
-        if not re.search(r"^\s*\w+\s*:=", code, re.MULTILINE):
-            return ValidationResult(
-                valid=False,
-                error="no rule or assignment found — policy body appears empty",
-                validator_used="regex",
-            )
+    # Must have at least one rule definition or assignment
+    # Supports classic Rego (`deny[msg] {`), Rego v1 (`deny if {`, `deny contains msg if {`),
+    # assignments (`is_admin := true`), and defaults (`default allow := false`).
+    rule_pattern = re.compile(
+        r"^\s*(?:default\s+)?\w+(?:\[[^\]]*\])?(?:\s+contains\s+\w+)?(?:\s*:=\s*|\s+if|\s*\{)",
+        re.MULTILINE,
+    )
+    if not rule_pattern.search(code):
+        return ValidationResult(
+            valid=False,
+            error="no rule or assignment found — policy body appears empty",
+            validator_used="regex",
+        )
 
     return ValidationResult(valid=True, validator_used="regex")
 
