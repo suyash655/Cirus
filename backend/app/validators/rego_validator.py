@@ -50,11 +50,15 @@ def _regex_validate_rego(code: str) -> ValidationResult:
         if not pattern.search(code):
             return ValidationResult(valid=False, error=msg, validator_used="regex")
 
+    for pattern, msg in _SUSPICIOUS_PATTERNS:
+        if pattern.search(code):
+            return ValidationResult(valid=False, error=msg, validator_used="regex")
+
     # Must have at least one rule definition or assignment
     # Supports classic Rego (`deny[msg] {`), Rego v1 (`deny if {`, `deny contains msg if {`),
     # assignments (`is_admin := true`), and defaults (`default allow := false`).
     rule_pattern = re.compile(
-        r"^\s*(?:default\s+)?\w+(?:\[[^\]]*\])?(?:\s+contains\s+\w+)?(?:\s*:=\s*|\s+if|\s*\{)",
+        r"^\s*(?:default\s+)?\w+(?:\[[^\]]*\])?(?:\s+contains\s+\w+)?(?:\s*:=\s*|\s+if\b|\s*\{)",
         re.MULTILINE,
     )
     if not rule_pattern.search(code):
@@ -123,3 +127,47 @@ def validate_rego(code: str) -> ValidationResult:
         return _regex_validate_rego(code)
 
     return opa_result
+
+
+def test_rego(policy_code: str, test_code: str) -> ValidationResult:
+    """
+    Run `opa test` against policy and test snippets.
+    Authoritative when opa binary is installed; falls back to validating
+    the syntax of both files when opa is absent.
+    """
+    if not policy_code or not policy_code.strip():
+        return ValidationResult(valid=False, error="empty policy code", validator_used="regex")
+    if not test_code or not test_code.strip():
+        return ValidationResult(valid=False, error="empty test code", validator_used="regex")
+
+    opa_bin = shutil.which("opa")
+    if not opa_bin:
+        p_res = validate_rego(policy_code)
+        if not p_res.valid:
+            return p_res
+        t_res = validate_rego(test_code)
+        if not t_res.valid:
+            return ValidationResult(valid=False, error=f"Test syntax error: {t_res.error}", validator_used="regex")
+        return ValidationResult(valid=True, validator_used="regex")
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        p_path = os.path.join(tmpdir, "policy.rego")
+        t_path = os.path.join(tmpdir, "policy_test.rego")
+        with open(p_path, "w", encoding="utf-8") as f:
+            f.write(policy_code)
+        with open(t_path, "w", encoding="utf-8") as f:
+            f.write(test_code)
+
+        try:
+            result = subprocess.run(
+                [opa_bin, "test", p_path, t_path, "-v"],
+                capture_output=True,
+                text=True,
+                timeout=15,
+            )
+            if result.returncode != 0:
+                err = (result.stderr or result.stdout or "opa test failed").strip()
+                return ValidationResult(valid=False, error=err, validator_used="opa")
+            return ValidationResult(valid=True, validator_used="opa")
+        except subprocess.TimeoutExpired:
+            return ValidationResult(valid=False, error="opa test timed out (>15s)", validator_used="opa")
