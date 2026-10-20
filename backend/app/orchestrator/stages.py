@@ -104,7 +104,8 @@ async def run_root_cause(state: PipelineState, llm: LLMService) -> None:
     stage = _get_stage(state, StageID.ROOT_CAUSE)
     stage.start()
     try:
-        prompt = prompts.root_cause_prompt(state.raw_text, state.extraction)
+        safe_text = state.safe_text or scrub_pii(state.raw_text)
+        prompt = prompts.root_cause_prompt(safe_text, state.extraction)
         response = await llm.complete(
             messages=[LLMMessage(role="user", content=prompt)],
             system=prompts.system_prompt,
@@ -331,7 +332,8 @@ async def run_citation_extraction(state: PipelineState, llm: LLMService) -> None
     stage = _get_stage(state, StageID.CITATION_EXTRACTION)
     stage.start()
     try:
-        prompt = prompts.citation_extraction_prompt(state.raw_text)
+        safe_text = state.safe_text or scrub_pii(state.raw_text)
+        prompt = prompts.citation_extraction_prompt(safe_text)
         response = await llm.complete(
             messages=[LLMMessage(role="user", content=prompt)],
             system=prompts.system_prompt,
