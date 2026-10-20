@@ -84,6 +84,7 @@ class PipelineState:
     incident_id: str
     raw_text: str
     selected_artifacts: List[str]
+    safe_text: str = ""  # PII-scrubbed text for LLM prompts; raw_text stays in DB
     stages: List[StageState] = field(default_factory=list)
 
     # Populated progressively by stages
