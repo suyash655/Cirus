@@ -42,8 +42,14 @@ class ArtifactService:
         raw_text: str,
         root_cause: dict,
         extraction: dict,
-    ) -> dict:
-        """Generate a single artifact via LLM and persist it."""
+    ) -> tuple:
+        """Generate a single artifact via LLM, persist it, and return (content, raw_code).
+
+        raw_code is the code string to hand to the syntax validators:
+          - policy  -> content['code']       (Rego)
+          - iac     -> content.get('full_patch') or content.get('fullPatch')  (Terraform HCL)
+          - others  -> '' (no AST validator applies)
+        """
         prompt_method = _ARTIFACT_PROMPT_MAP.get(artifact_type)
         if not prompt_method:
             raise ArtifactGenerationError(artifact_type, f"Unknown artifact type: {artifact_type}")
@@ -71,15 +77,15 @@ class ArtifactService:
             if settings.ENVIRONMENT == "development" or settings.MODE == "mock":
                 # Provide simple mock content tailored to artifact type
                 if artifact_type == "policy":
-                    content = {"code": "package cirus\n\n# mock policy to block insecure-s3"}
+                    content = {"code": 'package cirus.guardrail\n\nimport rego.v1\n\n# Mock: deny any S3 bucket that is public\ndefault deny := false\n\ndeny if {\n    input.resource == "aws_s3_bucket"\n    input.public_access == true\n}\n'}
                 elif artifact_type == "iac":
-                    content = {"fullPatch": "- resource \"aws_s3_bucket\" \"fixed\" {\n  # mock patch\n}\n"}
+                    content = {"full_patch": 'resource "aws_s3_bucket_public_access_block" "demo_remediation" {\n  bucket                  = aws_s3_bucket.example.id\n  block_public_acls       = true\n  block_public_policy     = true\n  ignore_public_acls      = true\n  restrict_public_buckets = true\n}\n', "fullPatch": "# see full_patch"}
                 elif artifact_type == "runbook":
-                    content = {"steps": [{"id": 1, "title": "Investigate", "description": "Check S3 buckets."}]} 
+                    content = {"steps": [{"id": 1, "title": "Investigate", "description": "Check S3 buckets for public access."}]}
                 elif artifact_type == "alerts":
-                    content = {"rules": [{"name": "HighErrorRate", "expression": "sum(errors) > 100"}]}
+                    content = {"rules": [{"name": "PublicS3BucketDetected", "expression": "aws_s3_public_access_enabled > 0", "severity": "critical"}]}
                 elif artifact_type == "rca":
-                    content = {"executiveSummary": "Mock RCA: root cause identified as infrastructure damage.", "details": "Mock details."}
+                    content = {"executiveSummary": "Mock RCA: S3 bucket was inadvertently set to public.", "details": "Root cause: missing public access block on bucket creation."}
                 else:
                     content = {"content": "mock"}
             else:
@@ -87,6 +93,14 @@ class ArtifactService:
 
         # Ensure type field is set
         content["type"] = artifact_type
+
+        # Extract the raw validatable code string for the validator stage.
+        # policy -> Rego code, iac -> Terraform HCL, everything else -> empty.
+        raw_code = ""
+        if artifact_type == "policy":
+            raw_code = content.get("code", "")
+        elif artifact_type == "iac":
+            raw_code = content.get("full_patch") or content.get("fullPatch") or ""
 
         artifact = await self._repo.upsert(
             incident_id=incident_id,
@@ -96,7 +110,7 @@ class ArtifactService:
             tokens_used=response.tokens_used,
         )
         log.info("artifact generated", incident_id=incident_id, type=artifact_type, version=artifact.version)
-        return content
+        return content, raw_code
 
     async def get_artifact_set(self, incident_id: str) -> ArtifactSetRead:
         artifacts = await self._repo.list_by_incident(incident_id)
@@ -125,7 +139,7 @@ class ArtifactService:
         root_cause: dict,
         extraction: dict,
     ) -> ArtifactRead:
-        content = await self.generate_artifact(
+        content, _raw_code = await self.generate_artifact(
             incident_id=incident_id,
             artifact_type=artifact_type,
             raw_text=raw_text,
