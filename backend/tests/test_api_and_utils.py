@@ -119,3 +119,19 @@ def test_pii_scrubber():
     assert "[ACCOUNT_ID]" in scrubbed
     assert "gsk_abcdef123456789012345678" not in scrubbed
     assert "[API_KEY]" in scrubbed
+
+
+def test_rego_validator():
+    from app.validators.rego_validator import validate_rego
+    valid_rego = 'package cirus.guardrail\n\nimport rego.v1\n\ndefault deny := false\n\ndeny if {\n    input.public == true\n}\n'
+    invalid_rego = 'package cirus\ndefault deny :='
+    assert validate_rego(valid_rego).valid is True
+    assert validate_rego(invalid_rego).valid is False
+
+
+def test_terraform_validator():
+    from app.validators.terraform_validator import validate_terraform
+    valid_tf = 'resource "aws_s3_bucket" "test" {\n  bucket = "my-bucket"\n}\n'
+    invalid_tf = 'resource "aws_s3_bucket" "test" {\n  bucket = '
+    assert validate_terraform(valid_tf).valid is True
+    assert validate_terraform(invalid_tf).valid is False
