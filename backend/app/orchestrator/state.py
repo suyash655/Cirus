@@ -92,6 +92,10 @@ class PipelineState:
     root_cause: Dict[str, Any] = field(default_factory=dict)
     enrichment_context: List[Dict[str, Any]] = field(default_factory=list)
     artifacts_generated: List[str] = field(default_factory=list)
+    # artifact_content: written by Stage 4 (generation), read by Stage 5 (validator).
+    # Maps artifact_type (e.g. "policy") -> the raw validatable code string.
+    # Only policy (Rego) and iac (HCL) have non-empty entries; prose artifacts are empty.
+    artifact_content: Dict[str, str] = field(default_factory=dict)
     risk_score: Optional[Dict[str, Any]] = None
     citations: List[Dict[str, Any]] = field(default_factory=list)
     total_tokens: int = 0
